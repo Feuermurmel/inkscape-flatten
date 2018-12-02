@@ -130,6 +130,10 @@ class Layer(Mapping):
         else:
             raise KeyError(item)
 
+    def __hash__(self):
+        # It's handy than we can create sets of layers using the instance's identities.
+        return id(self)
+
     @property
     def path(self):
         return [name for name, _ in self._path_with_ids]
