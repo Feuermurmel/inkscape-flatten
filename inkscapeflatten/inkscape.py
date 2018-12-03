@@ -1,16 +1,17 @@
 import copy
 import subprocess
-import xml.etree.ElementTree as etree
+
+from lxml import etree
+from lxml.etree import ElementTree
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from xml.etree.ElementTree import ElementTree
 from collections.abc import Mapping
 
 from inkscapeflatten.vendored import simplestyle
 
 
 def _gather_layers(tree: ElementTree):
-    def walk_layer(element, path):
+    def walk_layer(id, path, element):
         nodes = element.findall(
             '{http://www.w3.org/2000/svg}g[@{http://www.inkscape.org/namespaces/inkscape}groupmode="layer"]')
 
@@ -22,11 +23,23 @@ def _gather_layers(tree: ElementTree):
                 # Make sure that every layer has an ID. Otherwise we're screwed, because we won't be able to find the element again later.
                 assert id is not None
 
-                yield walk_layer(node, path + [(name, id)])
+                yield walk_layer(id, path + [name], node)
 
-        return Layer(path, list(iter_children()))
+        return Layer(id, path, list(iter_children()))
 
-    return walk_layer(tree, [])
+    return walk_layer(None, [], tree)
+
+
+def _get_ancestor_nodes(node):
+    def _iter_ancestor_nodes():
+        ancestor = node
+
+        while ancestor is not None:
+            yield ancestor
+
+            ancestor = ancestor.getparent()
+
+    return list(_iter_ancestor_nodes())
 
 
 def _set_style(node, name, value):
@@ -46,33 +59,34 @@ def _hide_deselected_layers(tree: ElementTree, layers: list):
 
     tree = copy.deepcopy(tree)
 
-    def get_node_by_id(id):
-        if id is None:
+    def get_ancestor_nodes(layer):
+        if layer.id is None:
             node = tree.getroot()
         else:
             # FIXME: ID should be escaped here.
-            node = tree.find('.//*[@id="{}"]'.format(id))
+            node = tree.find('.//*[@id="{}"]'.format(layer.id))
 
         assert node is not None
 
-        return node
+        return _get_ancestor_nodes(node)
 
-    selected_ids = set()
-    selected_ancestor_ids = set()
+    selected_nodes = set()
+    selected_nodes_ancestors = set()
 
     for layer in layers:
-        # Add None to represent the root layer, which does not necessarily have an ID.
-        ids = [None] + [id for _, id in layer._path_with_ids]
+        nodes = get_ancestor_nodes(layer)
 
-        selected_ids.add(ids[-1])
-        selected_ancestor_ids.update(ids)
+        selected_nodes.add(nodes[0])
+        selected_nodes_ancestors.update(nodes)
 
-    for i in selected_ancestor_ids - selected_ids:
-        for node in get_node_by_id(i).findall('*'):
+    # Hide siblings of all nodes along the path from a selected layer to the root.
+    for i in selected_nodes_ancestors - selected_nodes:
+        for node in i.findall('*'):
             _set_style(node, 'display', 'none')
 
-    for i in selected_ancestor_ids:
-        _set_style(get_node_by_id(i), 'display', None)
+    # Unhide all nodes along the path from a selected layer to the root.
+    for i in selected_nodes_ancestors:
+        _set_style(i, 'display', None)
 
     return tree
 
@@ -85,7 +99,7 @@ class SVGDocument:
     def save_to_pdf(self, path: Path, layers: list = None):
         if layers is None:
             # Insert a dummy root layer reference to export all layers marked as visible in Inkscape.
-            layers = [Layer([], [])]
+            layers = [Layer(None, [], [])]
 
         tree = _hide_deselected_layers(self.tree, layers)
         temp_pdf_path = path.parent / (path.name + '~')
@@ -111,9 +125,9 @@ class SVGDocument:
 
 
 class Layer(Mapping):
-    def __init__(self, path_with_ids: list, children: list):
-        # List of tuples (name, id) for all ancestors.
-        self._path_with_ids = path_with_ids
+    def __init__(self, id: str, path: list, children: list):
+        self.id = id
+        self.path = path
 
         self._items = [(i.name, i) for i in children]
 
@@ -135,17 +149,8 @@ class Layer(Mapping):
         return id(self)
 
     @property
-    def path(self):
-        return [name for name, _ in self._path_with_ids]
-
-    @property
     def name(self):
-        path = self.path
-
-        if not path:
-            return ''
-
-        return path[-1]
+        return ([''] + self.path)[-1]
 
     @property
     def flatten(self):
