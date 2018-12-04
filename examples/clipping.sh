@@ -5,5 +5,5 @@ set -eu
 cd "$(dirname "$BASH_SOURCE")"
 
 for i in rainbow applejack pinkie twilight rarity fluttershy; do
-    inkscape-flatten -l ponies -c "$i" clipping.svg "clipping-$i.pdf"
+    inkscape-flatten -o "clipping-$i.pdf" -c "$i" clipping.svg ponies
 done

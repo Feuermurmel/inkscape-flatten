@@ -44,22 +44,23 @@ def parse_args():
         help='Path from which to load an Inkscape SVG file.')
 
     parser.add_argument(
-        'output_pdf_path',
+        '-o',
+        '--output',
         type=Path,
-        nargs='?',
+        metavar='output_pdf_path',
+        dest='output_pdf_path',
         help='Path to which a PDF contining the selected layers should be written to.')
 
     parser.add_argument(
-        '-l',
-        '--layer',
-        dest='layers',
+        'layers',
+        nargs='*',
         metavar='layer_pattern',
-        action='append',
-        help='A shell-like pattern used to select which layers from the SVG file to export. The pattern is matched agains the full path of each layer. This option can be specified multiple times to select multiple sets of layers. Without this option, all layers marked as "visible" are exported.')
+        help='Shell-like patterns used to select which layers from the SVG file to export. Each pattern is matched agains the full path of each layer. When no patterns are given, all layers marked as "visible" are exported.')
 
     parser.add_argument(
         '-c',
         '--clip',
+        metavar='clip_layer',
         help='Full path of a layer used to clip the generated PDF file. The document is clipped to the bounding box of the this layer\'s content before exporting.')
 
     parser.add_argument(
