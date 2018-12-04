@@ -75,14 +75,14 @@ def parse_args():
         if args.output_pdf_path is not None:
             parser.error('Only one of output_pdf_path and --list can be specified.')
 
-        if args.layers is not None:
+        if args.layers:
             parser.error('Only one of --layer and --list can be specified.')
 
         if args.clip is not None:
             parser.error('Only one of --clip and --list can be specified.')
     else:
         if args.output_pdf_path is None:
-            parser.error('One of output_pdf_path or --list must be specified.')
+            parser.error('One of --output or --list must be specified.')
 
     return args
 
@@ -95,10 +95,10 @@ def main(input_svg_path: Path, output_pdf_path: Path, layers: list, clip: str, l
         for i in document.layers.flatten[1:]:
             print('/'.join(i.path))
     else:
-        if layers is None:
-            selected_layers = None
-        else:
+        if layers:
             selected_layers = set(j for i in layers for j in _select_layers(document, i))
+        else:
+            selected_layers = None
 
         if clip is None:
             clip_layer = None

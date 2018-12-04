@@ -4,6 +4,8 @@ set -eu
 
 cd "$(dirname "$BASH_SOURCE")"
 
+inkscape-flatten -o "layers.pdf" layers.svg
+
 for i in a b c c/1 c/2; do
     inkscape-flatten -o "layers-${i//"/"}.pdf" layers.svg "$i"
 done
