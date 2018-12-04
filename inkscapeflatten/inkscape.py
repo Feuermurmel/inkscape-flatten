@@ -1,12 +1,15 @@
 import copy
 import subprocess
+import sys
+from collections.abc import Mapping
+from pathlib import Path
+from subprocess import CalledProcessError
+from tempfile import TemporaryDirectory
 
 from lxml import etree
 from lxml.etree import ElementTree
-from pathlib import Path
-from tempfile import TemporaryDirectory
-from collections.abc import Mapping
 
+from inkscapeflatten.util import UserError
 from inkscapeflatten.vendored import simplestyle
 
 
@@ -115,9 +118,15 @@ class SVGDocument:
                 str(temp_pdf_path),
                 str(temp_svg_path)]
 
-            subprocess.run(args, check=True)
+            try:
+                    subprocess.run(args, check=True)
 
         temp_pdf_path.rename(path)
+                except CalledProcessError as error:
+                    sys.stderr.buffer.write(error.stderr)
+
+                    # TODO: Wrap in UserError
+                    raise UserError('Command failed: {}'.format(' '.join(args)))
 
     @classmethod
     def from_file(cls, path: Path):

@@ -1,14 +1,10 @@
 import fnmatch
+import sys
 from argparse import ArgumentParser
 from pathlib import Path
 
-import sys
-
 from inkscapeflatten.inkscape import SVGDocument, Layer
-
-
-class UserError(Exception):
-    pass
+from inkscapeflatten.util import UserError
 
 
 def _select_layers(document: SVGDocument, pattern: str):
