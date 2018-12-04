@@ -1,16 +1,18 @@
 import copy
+import re
 import subprocess
 import sys
 from collections.abc import Mapping
+from contextlib import contextmanager
 from pathlib import Path
 from subprocess import CalledProcessError
 from tempfile import TemporaryDirectory
 
 from lxml import etree
-from lxml.etree import ElementTree
+from lxml.etree import ElementTree, Element
 
 from inkscapeflatten.util import UserError
-from inkscapeflatten.vendored import simplestyle
+from inkscapeflatten.vendored import simplestyle, simpletransform
 
 
 def _gather_layers(tree: ElementTree):
@@ -33,7 +35,19 @@ def _gather_layers(tree: ElementTree):
     return walk_layer(None, [], tree)
 
 
-def _get_ancestor_nodes(node):
+def _get_layer_node(tree: ElementTree, layer: 'Layer'):
+    if layer.id is None:
+        node = tree.getroot()
+    else:
+        # FIXME: ID should be escaped here.
+        node = tree.find('.//*[@id="{}"]'.format(layer.id))
+
+    assert node is not None
+
+    return node
+
+
+def _get_ancestor_nodes(node: Element):
     def _iter_ancestor_nodes():
         ancestor = node
 
@@ -62,25 +76,14 @@ def _hide_deselected_layers(tree: ElementTree, layers: list):
 
     tree = copy.deepcopy(tree)
 
-    def get_ancestor_nodes(layer):
-        if layer.id is None:
-            node = tree.getroot()
-        else:
-            # FIXME: ID should be escaped here.
-            node = tree.find('.//*[@id="{}"]'.format(layer.id))
-
-        assert node is not None
-
-        return _get_ancestor_nodes(node)
-
     selected_nodes = set()
     selected_nodes_ancestors = set()
 
     for layer in layers:
-        nodes = get_ancestor_nodes(layer)
+        ancestors_nodes = _get_ancestor_nodes(_get_layer_node(tree, layer))
 
-        selected_nodes.add(nodes[0])
-        selected_nodes_ancestors.update(nodes)
+        selected_nodes.add(ancestors_nodes[0])
+        selected_nodes_ancestors.update(ancestors_nodes)
 
     # Hide siblings of all nodes along the path from a selected layer to the root.
     for i in selected_nodes_ancestors - selected_nodes:
@@ -94,34 +97,77 @@ def _hide_deselected_layers(tree: ElementTree, layers: list):
     return tree
 
 
+def _adjust_view_box(svg_element: Element, bounds):
+    # "parse" in biq air-quotes.
+    def parse_measure(measure):
+        value, unit = re.match(r'(.+?)(\w+)$', measure).groups()
+
+        return float(value), unit
+
+    width, width_unit = parse_measure(svg_element.get('width'))
+    height, height_unit = parse_measure(svg_element.get('height'))
+    old_xmin, old_ymin, old_xsize, old_ysize = map(float, svg_element.get('viewBox').split())
+
+    xmin, xmax, ymin, ymax = bounds
+    xsize = xmax - xmin
+    ysize = ymax - ymin
+
+    width *= xsize / old_xsize
+    height *= ysize / old_ysize
+
+    svg_element.set('width', '{}{}'.format(width, width_unit))
+    svg_element.set('height', '{}{}'.format(height, height_unit))
+    svg_element.set('viewBox', '{} {} {} {}'.format(xmin, ymin, xsize, ysize))
+
+
+def _crop_to_layer_bounds(tree: ElementTree, layer: 'Layer'):
+    tree = copy.deepcopy(tree)
+    node = _get_layer_node(tree, layer)
+    bounds = simpletransform.computeBBox(node, simpletransform.composeParents(node))
+
+    _adjust_view_box(tree.getroot(), bounds)
+
+    return tree
+
+
+@contextmanager
+def _safe_update_file(dest_path: Path):
+    temp_path = dest_path.parent / (dest_path.name + '~')
+
+    yield temp_path
+
+    temp_path.rename(dest_path)
+
+
 class SVGDocument:
     def __init__(self, tree: ElementTree):
         self.tree = tree
         self.layers = _gather_layers(tree)
 
-    def save_to_pdf(self, path: Path, layers: list = None):
+    def save_to_pdf(self, path: Path, layers: list = None, region: 'Layer' = None):
         if layers is None:
             # Insert a dummy root layer reference to export all layers marked as visible in Inkscape.
             layers = [Layer(None, [], [])]
 
         tree = _hide_deselected_layers(self.tree, layers)
-        temp_pdf_path = path.parent / (path.name + '~')
 
-        with TemporaryDirectory() as temp_dir:
-            temp_svg_path = Path(temp_dir) / 'document.svg'
-            tree.write(str(temp_svg_path))
+        if region is not None:
+            tree = _crop_to_layer_bounds(tree, region)
 
-            args = [
-                'inkscape',
-                '--export-area-page',
-                '--export-pdf',
-                str(temp_pdf_path),
-                str(temp_svg_path)]
+        with _safe_update_file(path) as temp_pdf_path:
+            with TemporaryDirectory() as temp_dir:
+                temp_svg_path = Path(temp_dir) / 'document.svg'
+                tree.write(str(temp_svg_path))
 
-            try:
-                    subprocess.run(args, check=True)
+                args = [
+                    'inkscape',
+                    '--export-area-page',
+                    '--export-pdf',
+                    str(temp_pdf_path),
+                    str(temp_svg_path)]
 
-        temp_pdf_path.rename(path)
+                try:
+                    subprocess.run(args, check=True, stderr=subprocess.PIPE)
                 except CalledProcessError as error:
                     sys.stderr.buffer.write(error.stderr)
 

@@ -23,6 +23,18 @@ def _select_layers(document: SVGDocument, pattern: str):
     return layers
 
 
+def _get_layer(document: SVGDocument, path: str):
+    layer = document.layers
+
+    for i in path.split('/'):
+        layer = layer.get(i)
+
+        if layer is None:
+            raise UserError('Layer not found: {}'.format(path))
+
+    return layer
+
+
 def parse_args():
     parser = ArgumentParser()
 
@@ -46,6 +58,11 @@ def parse_args():
         help='A shell-like pattern used to select which layers from the SVG file to export. The pattern is matched agains the full path of each layer. This option can be specified multiple times to select multiple sets of layers. Without this option, all layers marked as "visible" are exported.')
 
     parser.add_argument(
+        '-c',
+        '--clip',
+        help='Full path of a layer used to clip the generated PDF file. The document is clipped to the bounding box of the this layer\'s content before exporting.')
+
+    parser.add_argument(
         '-L',
         '--list',
         action='store_true',
@@ -59,6 +76,9 @@ def parse_args():
 
         if args.layers is not None:
             parser.error('Only one of --layer and --list can be specified.')
+
+        if args.clip is not None:
+            parser.error('Only one of --clip and --list can be specified.')
     else:
         if args.output_pdf_path is None:
             parser.error('One of output_pdf_path or --list must be specified.')
@@ -66,7 +86,7 @@ def parse_args():
     return args
 
 
-def main(input_svg_path: Path, output_pdf_path: Path, layers: list, list: bool):
+def main(input_svg_path: Path, output_pdf_path: Path, layers: list, clip: str, list: bool):
     document = SVGDocument.from_file(input_svg_path)
 
     if list:
@@ -79,7 +99,12 @@ def main(input_svg_path: Path, output_pdf_path: Path, layers: list, list: bool):
         else:
             selected_layers = set(j for i in layers for j in _select_layers(document, i))
 
-        document.save_to_pdf(output_pdf_path, selected_layers)
+        if clip is None:
+            clip_layer = None
+        else:
+            clip_layer = _get_layer(document, clip)
+
+        document.save_to_pdf(output_pdf_path, selected_layers, clip_layer)
 
 
 def script_main():
