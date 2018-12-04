@@ -9,7 +9,7 @@ from subprocess import CalledProcessError
 from tempfile import TemporaryDirectory
 
 from lxml import etree
-from lxml.etree import ElementTree, Element
+from lxml.etree import ElementTree, Element, XMLParser
 
 from inkscapeflatten.util import UserError
 from inkscapeflatten.vendored import simplestyle, simpletransform
@@ -176,7 +176,7 @@ class SVGDocument:
 
     @classmethod
     def from_file(cls, path: Path):
-        return cls(etree.parse(str(path)))
+        return cls(etree.parse(str(path), XMLParser(huge_tree=True)))
 
 
 class Layer(Mapping):
