@@ -1,10 +1,44 @@
 import fnmatch
+import re
 import sys
-from argparse import ArgumentParser
+from argparse import ArgumentParser, ArgumentTypeError
 from pathlib import Path
 
-from inkscapeflatten.inkscape import SVGDocument, Layer
+from inkscapeflatten.inkscape import SVGDocument, Layer, Transformation
 from inkscapeflatten.util import UserError
+
+
+class LayerSelection:
+    def __init__(self, pattern, offset):
+        self.pattern = pattern
+        self.offset = offset
+
+    @classmethod
+    def from_string(cls, string):
+        pattern = \
+            '(?P<pattern>[^@]+)' \
+            '(@(?P<offset_x>[^@,]+),(?P<offset_y>[^@,]+))?$'
+
+        match = re.match(pattern, string)
+
+        if match is None:
+            raise ArgumentTypeError('Invalid layer selection: {}'.format(string))
+
+        selection_pattern = match.group('pattern')
+        offset_x_str = match.group('offset_x')
+        offset_y_str = match.group('offset_y')
+
+        if not offset_x_str:
+            offset_x = 0
+        else:
+            offset_x = float(offset_x_str)
+
+        if not offset_y_str:
+            offset_y = 0
+        else:
+            offset_y = float(offset_y_str)
+
+        return cls(selection_pattern, (offset_x, offset_y))
 
 
 def _select_layers(document: SVGDocument, pattern: str):
@@ -53,9 +87,10 @@ def parse_args():
 
     parser.add_argument(
         'layers',
+        type=LayerSelection.from_string,
         nargs='*',
         metavar='layer_pattern',
-        help='Shell-like patterns used to select which layers from the SVG file to export. Each pattern is matched agains the full path of each layer. When no patterns are given, all layers marked as "visible" are exported.')
+        help='Shell-like patterns used to select which layers from the SVG file to export. Each pattern is matched agains the full path of each layer. When no patterns are given, all layers marked as "visible" are exported. Patterns can be suffixed with @<offset_x>,<offset_y> to offset the selcted layer by the specified vector.')
 
     parser.add_argument(
         '-c',
@@ -95,10 +130,22 @@ def main(input_svg_path: Path, output_pdf_path: Path, layers: list, clip: str, l
         for i in document.layers.flatten[1:]:
             print('/'.join(i.path))
     else:
+        transformation_by_layer = {}
+
         if layers:
-            selected_layers = set(j for i in layers for j in _select_layers(document, i))
+            selected_layers = set()
+
+            for i in layers:
+                for j in _select_layers(document, i.pattern):
+                    selected_layers.add(j)
+
+                    if i.offset != (0, 0):
+                        # FIXME: Offset for same layer may be specified through multiple selections.
+                        transformation_by_layer[j] = Transformation.from_offset(i.offset)
         else:
             selected_layers = None
+
+        document = document.with_transformed_layers(transformation_by_layer)
 
         if clip is None:
             clip_layer = None

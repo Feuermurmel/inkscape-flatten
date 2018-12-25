@@ -79,6 +79,10 @@ def parseTransform(transf,mat=[[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]):
         return matrix
 
 
+def formatTransform(mat):
+    return ("matrix(%f,%f,%f,%f,%f,%f)" % (mat[0][0], mat[1][0], mat[0][1], mat[1][1], mat[0][2], mat[1][2]))
+
+
 def composeTransform(M1,M2):
     a11 = M1[0][0]*M2[0][0] + M1[0][1]*M2[1][0]
     a12 = M1[0][0]*M2[0][1] + M1[0][1]*M2[1][1]
@@ -97,6 +101,12 @@ def composeParents(node, mat=[[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]):
     if node.getparent().tag == inkex.addNS('g','svg'):
         mat = composeParents(node.getparent(), mat)
     return mat
+
+
+def applyTransformToNode(mat,node):
+    m=parseTransform(node.get("transform"))
+    newtransf=formatTransform(composeTransform(mat,m))
+    node.set("transform", newtransf)
 
 
 def applyTransformToPoint(mat,pt):

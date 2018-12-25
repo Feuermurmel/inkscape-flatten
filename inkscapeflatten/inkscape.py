@@ -97,6 +97,12 @@ def _hide_deselected_layers(tree: ElementTree, layers: list):
     return tree
 
 
+def _transform_layer(tree: ElementTree, layer: 'Layer', transformation: 'Transformation'):
+    node = _get_layer_node(tree, layer)
+
+    simpletransform.applyTransformToNode(transformation.m, node)
+
+
 def _adjust_view_box(svg_element: Element, bounds):
     # "parse" in biq air-quotes.
     def parse_measure(measure):
@@ -173,6 +179,14 @@ class SVGDocument:
                     # TODO: Wrap in UserError
                     raise UserError('Command failed: {}'.format(' '.join(args)))
 
+    def with_transformed_layers(self, transformations_by_layer):
+        tree = copy.deepcopy(self.tree)
+
+        for layer, transformation in transformations_by_layer.items():
+            _transform_layer(tree, layer, transformation)
+
+        return type(self)(tree)
+
     @classmethod
     def from_file(cls, path: Path):
         return cls(etree.parse(str(path), XMLParser(huge_tree=True)))
@@ -209,3 +223,18 @@ class Layer(Mapping):
     @property
     def flatten(self):
         return [self] + [j for _, child in self._items for j in child.flatten]
+
+
+class Transformation:
+    def __init__(self, m: list):
+        self.m = m
+
+    @classmethod
+    def from_offset(cls, offset):
+        offset_x, offset_y = offset
+
+        m = [
+            [1, 0, offset_x],
+            [0, 1, offset_y]]
+
+        return cls(m)
