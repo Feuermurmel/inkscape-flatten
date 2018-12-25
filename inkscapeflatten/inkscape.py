@@ -146,8 +146,7 @@ class SVGDocument:
 
     def save_to_pdf(self, path: Path, layers: list = None, region: 'Layer' = None):
         if layers is None:
-            # Insert a dummy root layer reference to export all layers marked as visible in Inkscape.
-            layers = [Layer(None, [], [])]
+            layers = [self.layers]
 
         tree = _hide_deselected_layers(self.tree, layers)
 
