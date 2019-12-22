@@ -15,6 +15,15 @@ class LayerSelection:
 
     @classmethod
     def from_string(cls, string):
+
+        string = string.strip()
+
+        if len(string) == 0:
+            return None
+
+        if string.startswith('#'):
+            return None
+
         pattern = \
             '(?P<pattern>[^@]+)' \
             '(@(?P<offset_x>[^@,]+),(?P<offset_y>[^@,]+))?$'
@@ -118,6 +127,7 @@ def parse_args():
     else:
         if args.output_pdf_path is None:
             parser.error('One of --output or --list must be specified.')
+        args.layers = filter(lambda l: l is not None, args.layers)
 
     return args
 
