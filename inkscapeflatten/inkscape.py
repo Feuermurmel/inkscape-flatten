@@ -164,12 +164,14 @@ class SVGDocument:
                 temp_svg_path = Path(temp_dir) / 'document.svg'
                 tree.write(str(temp_svg_path))
 
+                actions = f'export-background:white;export-area-page;export-filename:{temp_pdf_path};export-do'
+
                 args = [
                     'inkscape',
-                    '--export-area-page',
-                    '--export-pdf',
-                    str(temp_pdf_path),
-                    str(temp_svg_path)]
+                    '--batch-process',
+                    f'--actions={actions}',
+                    str(temp_svg_path)
+                ]
 
                 try:
                     subprocess.run(args, check=True, stderr=subprocess.PIPE)
