@@ -138,7 +138,7 @@ def _crop_to_layer_bounds(tree: ElementTree, layer: 'Layer'):
 
 @contextmanager
 def _safe_update_file(dest_path: Path):
-    temp_path = dest_path.parent / (dest_path.name + '~')
+    temp_path = dest_path.parent / ('__' + dest_path.name)
 
     yield temp_path
 
